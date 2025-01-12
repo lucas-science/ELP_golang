@@ -36,7 +36,7 @@ func distanceEuclidienneRGB(pixel1 RGB, pixel2 RGB) float64 {
 	return math.Sqrt(math.Pow(float64(r1-r2), 2) + math.Pow(float64(g1-g2), 2) + math.Pow(float64(b1-b2), 2))
 }
 
-func rowProcessDistance(row1, row2 []RGB) float64 {
+func rowProcessDistance(row1 []RGB, row2 []RGB) float64 {
 	var distance float64
 	for i := 0; i < len(row1); i++ {
 		distance += distanceEuclidienneRGB(row1[i], row2[i])
@@ -82,8 +82,14 @@ func GetTotalDistance(imageData1 image.Image, imageData2 image.Image) float64 {
 
 	totalDistance := 0.0
 	for i := 0; i < len(matrix1); i++ {
-		totalDistance += rowProcessDistance(matrix1[i], matrix2[i])
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			totalDistance += rowProcessDistance(matrix1[i], matrix2[i])
+		}(i)
 	}
+	wg.Wait()
+
 	return totalDistance
 }
 
@@ -91,7 +97,7 @@ func main() {
 	fmt.Println("Hello, world.")
 
 	imageData1, _, err1 := getImageData("./img/img1.jpg")
-	imageData2, _, err2 := getImageData("./img/img2.jpg")
+	imageData2, _, err2 := getImageData("./img/img3.jpg")
 
 	if err1 != nil || err2 != nil {
 		if err1 != nil {
@@ -106,6 +112,4 @@ func main() {
 	totalDistance := GetTotalDistance(imageData1, imageData2)
 
 	fmt.Println("Total distance:", totalDistance)
-	fmt.Println(imageData1.At(10, 20))
-	fmt.Println(imageData2.At(10, 20))
 }
