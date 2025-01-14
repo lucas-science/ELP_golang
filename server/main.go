@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 )
 
+var fileCounter int = 0
+
 func main() {
 	if err := os.MkdirAll("./data", 0755); err != nil {
 		log.Fatal("Erreur création dossier received:", err)
@@ -74,13 +76,16 @@ func handleIncomingFile(conn net.Conn) error {
 		return fmt.Errorf("nom de fichier invalide")
 	}
 
-	fmt.Printf("Réception du fichier: %s\n", fileName)
+	newName := fmt.Sprintf("%d.jpg", fileCounter)
+	fileCounter++
+
+	fmt.Printf("Réception du fichier: %s\n", newName)
 
 	if _, err := conn.Write([]byte("Header Received")); err != nil {
 		return fmt.Errorf("erreur envoi confirmation header: %v", err)
 	}
 
-	filePath := filepath.Join("./received", fileName)
+	filePath := filepath.Join("./received", newName)
 	file, err := os.Create(filePath)
 	if err != nil {
 		return fmt.Errorf("erreur création fichier: %v", err)
