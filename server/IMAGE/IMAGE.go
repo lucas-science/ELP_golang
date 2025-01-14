@@ -9,6 +9,8 @@ import (
 	"sync"
 )
 
+var wg sync.WaitGroup
+
 type RGB struct {
 	R, G, B int
 }
@@ -54,7 +56,8 @@ func createRGBRow(imageData image.Image, y int) []RGB {
 	return row
 }
 
-func GetTotalDistance(imageData1 image.Image, imageData2 image.Image) float64 {
+func GetTotalDistance(imageData1 image.Image, imageData2 image.Image, wg2 sync.WaitGroup) float64 {
+	defer wg2.Done()
 	bounds1 := imageData1.Bounds()
 	bounds2 := imageData2.Bounds()
 
@@ -77,8 +80,6 @@ func GetTotalDistance(imageData1 image.Image, imageData2 image.Image) float64 {
 		}(y)
 	}
 	wg.Wait()
-
-	fmt.Println("Matrices remplies. Calcul de la distance totale...")
 
 	totalDistance := 0.0
 	for i := 0; i < len(matrix1); i++ {

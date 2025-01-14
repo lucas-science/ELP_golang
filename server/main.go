@@ -7,30 +7,58 @@ import (
     "log"
     "net"
     "time"
+    "sync"
+    "io/ioutil"
     "encoding/hex"
-	_ "image"
+	"image"
 	imgFct "workspace/IMAGE"
 )
 
+var wg2 sync.WaitGroup
+
+
+
 func main() {
-	fmt.Println("Hello, world.")
-
-	imageData1, _, err1 := imgFct.GetImageData("./data/img1.jpg")
-	imageData2, _, err2 := imgFct.GetImageData("./data/img3.jpg")
-
-	if err1 != nil || err2 != nil {
-		if err1 != nil {
-			fmt.Println("Failed to get image data:", err1)
-		} else if err2 != nil {
-			fmt.Println("Failed to get image data:", err2)
-		} else {
-			fmt.Println("Failed to get these images data")
+	var compteur int = compte_Images("./data")
+	images := make([]image.Image, compteur)
+	var buff string
+	erreurs := make([]error, compteur)
+	for i := 1; i<=compteur; i++ {
+		buff = fmt.Sprintf("./data/img%d.jpg", i)
+		fmt.Println("buff num ", i," = ", buff)
+		images[i-1], _, erreurs[i-1] = imgFct.GetImageData(buff)
+		if erreurs[i-1] != nil {
+			fmt.Println("Failed to get image data:", erreurs[i])
+			os.Exit(1)
+			}
 		}
+	for i:=1; i<compteur; i++ {
+		for j:=(i+1); j<=compteur; j++ {
+			wg2.Add(1)
+			go compare(images[i-1], images[j-1], i, j)
+			}
+		}
+	wg2.Wait()
+}
+
+func compare(im1 image.Image, im2 image.Image, i int, j int) {
+	var distance float64 = 0
+	distance = imgFct.GetTotalDistance(im1, im2, wg2)
+	fmt.Println("distance entre image",i," et ",j," est de ", distance)
+}
+
+func compte_Images (dossier string) int {
+	fichiers, err := ioutil.ReadDir(dossier)
+	if err != nil {
 		os.Exit(1)
 	}
-	totalDistance := imgFct.GetTotalDistance(imageData1, imageData2)
-
-	fmt.Println("Total distance:", totalDistance)
+	var compteur int = 0
+	for _, fichier := range fichiers {
+		if !fichier.IsDir() {
+		compteur++
+		}
+	}
+	return compteur
 }
 
 
