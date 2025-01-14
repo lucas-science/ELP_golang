@@ -1,7 +1,10 @@
 package main
 
 import (
+	tcpFct "client/tcp"
 	"fmt"
+	"log"
+	"os"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
@@ -18,11 +21,54 @@ func showFolderOpen(parent fyne.Window) {
 			return
 		}
 		if folder != nil {
-			fmt.Println("Dossier sélectionné :", folder.Path())
+			sendPhoto(folder.Path())
 		} else {
 			fmt.Println("Aucun dossier sélectionné.")
 		}
 	}, parent)
+}
+
+func sendPhoto(folderPath string) any {
+	conn, err := tcpFct.CreateConnection()
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer conn.Close()
+
+	fmt.Println(folderPath)
+	f, err := os.Open(folderPath)
+	if err != nil {
+		fmt.Println(err)
+		return nil
+	}
+	files, err := f.Readdir(0)
+	if err != nil {
+		fmt.Println(err)
+		return nil
+	}
+
+	for i, v := range files {
+		fmt.Println(i, v.Name())
+
+		file, err := os.Open(folderPath + "/" + v.Name())
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer file.Close()
+
+		header := tcpFct.GetMetaDataFile(file)
+
+		if err := tcpFct.SendHeader(conn, header); err != nil {
+			fmt.Println("Erreur lors de l'envoi du header")
+			log.Fatal(err)
+		}
+
+		if err := tcpFct.SendFileSegments(conn, file, header); err != nil {
+			fmt.Println("Erreur lors de l'envoi du fichier")
+			log.Fatal(err)
+		}
+	}
+	return nil
 }
 
 func main() {

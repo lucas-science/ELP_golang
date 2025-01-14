@@ -19,6 +19,13 @@ var wg2 sync.WaitGroup
 
 
 func main() {
+
+	if err := os.MkdirAll("./data", 0755); err != nil {
+		log.Fatal("Erreur création dossier received:", err)
+	}
+	Init_Tcp()
+	
+	
 	var compteur int = compte_Images("./data")
 	images := make([]image.Image, compteur)
 	var buff string
@@ -61,84 +68,112 @@ func compte_Images (dossier string) int {
 	return compteur
 }
 
-
-
 func Init_Tcp() {
-    ln, err := net.Listen("tcp", ":8080")
-    if err != nil {
-        fmt.Println(err)
-        return
-    }
-    defer ln.Close()
+	ln, err := net.Listen("tcp", ":8080")
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	defer ln.Close()
 
-    for {
-    	fmt.Println("coucou")
-        conn, err := ln.Accept()
-        if err != nil {
-            log.Fatal(err)
-        }
-        println("Hello")
-        go handleIncomingRequests(conn)
-    }
+	for {
+		fmt.Println("En attente de connexion...")
+		conn, err := ln.Accept()
+		if err != nil {
+			log.Printf("Erreur d'acceptation de connexion: %v", err)
+			continue
+		}
+		go handleConnection(conn)
+	}
 }
 
-func handleIncomingRequests(conn net.Conn) {
-    fmt.Println("Received a request: " + conn.RemoteAddr().String())
-    headerBuffer := make([]byte, 1024)
+func handleConnection(conn net.Conn) {
+	defer conn.Close()
 
-    n, err := conn.Read(headerBuffer)
-    if err != nil || n != 1024 {
-        log.Fatal("Erreur de lecture du header ou taille incorrecte")
-    }
+	for {
+		if err := handleIncomingFile(conn); err != nil {
+			if err.Error() == "EOF" {
+				fmt.Println("Client déconnecté")
+				return
+			}
+			log.Printf("Erreur de traitement du fichier: %v", err)
+			return
+		}
+	}
+}
 
-    if headerBuffer[0] != byte(1) || headerBuffer[1023] != byte(0) {
-        log.Fatal("Invalid header markers")
-    }
+func handleIncomingFile(conn net.Conn) error {
+	headerBuffer := make([]byte, 1024)
 
-    var name string
-    var reps uint32
+	n, err := conn.Read(headerBuffer)
+	if err != nil {
+		return err
+	}
+	if n != 1024 {
+		return fmt.Errorf("taille header invalide: %d", n)
+	}
 
-    reps = binary.BigEndian.Uint32(headerBuffer[1:5])
-    lengthOfName := binary.BigEndian.Uint32(headerBuffer[5:9])
-    name = string(headerBuffer[9:9+lengthOfName])
+	if headerBuffer[0] != byte(1) || headerBuffer[1023] != byte(0) {
+		return fmt.Errorf("marqueurs header invalides")
+	}
 
-    conn.Write([]byte("Header Received"))
+	reps := binary.BigEndian.Uint32(headerBuffer[1:5])
+	lengthOfName := binary.BigEndian.Uint32(headerBuffer[5:9])
+	fullPath := string(headerBuffer[9 : 9+lengthOfName])
 
-    dataBuffer := make([]byte, 1024)
+	_, fileName := filepath.Split(fullPath)
+	if fileName == "" {
+		return fmt.Errorf("nom de fichier invalide")
+	}
 
-    file, err := os.Create("./received/" + name)
-    if err != nil {
-        log.Fatal(err)
-    }
+	newName := fmt.Sprintf("%d.jpg", fileCounter)
+	fileCounter++
 
-    for i := 0; i < int(reps); i++ {
-        _, err := conn.Read(dataBuffer)
-        if err != nil {
-            log.Fatal(err)
-        }
+	fmt.Printf("Réception du fichier: %s\n", newName)
 
-        if len(dataBuffer) < 1024 {
-            log.Fatal("Invalid Segment: Buffer size mismatch")
-        }
+	if _, err := conn.Write([]byte("Header Received")); err != nil {
+		return fmt.Errorf("erreur envoi confirmation header: %v", err)
+	}
 
-        segmentNumber := binary.BigEndian.Uint32(dataBuffer[1:5])
-        fmt.Printf("Segment Number: %d\n", segmentNumber)
+	filePath := filepath.Join("./received", newName)
+	file, err := os.Create(filePath)
+	if err != nil {
+		return fmt.Errorf("erreur création fichier: %v", err)
+	}
+	defer file.Close()
 
-        length := binary.BigEndian.Uint32(dataBuffer[5:9])
-        fmt.Printf("File Data: %s\n", hex.EncodeToString(dataBuffer[9:9+length]))
+	dataBuffer := make([]byte, 1024)
+	for i := 0; i < int(reps); i++ {
+		n, err := conn.Read(dataBuffer)
+		if err != nil {
+			return fmt.Errorf("erreur lecture segment %d: %v", i, err)
+		}
+		if n != 1024 {
+			return fmt.Errorf("taille segment %d invalide: %d", i, n)
+		}
 
-        file.Write(dataBuffer[9 : 9+length])
+		segmentNumber := binary.BigEndian.Uint32(dataBuffer[1:5])
+		length := binary.BigEndian.Uint32(dataBuffer[5:9])
 
-        if dataBuffer[0] != byte(0) || dataBuffer[1023] != byte(1) {
-            log.Fatal("Invalid Segment")
-        }
+		fmt.Printf("Fichier: %s, Segment: %d/%d\n", fileName, segmentNumber+1, reps)
 
-        conn.Write([]byte("Segment Received"))
-    }
+		if length > 1014 {
+			return fmt.Errorf("longueur données invalide segment %d: %d", i, length)
+		}
 
-    time := time.Now().UTC().Format("Monday, 02-Jan-06 15:04:05 MST")
-    conn.Write([]byte(time))
+		if _, err := file.Write(dataBuffer[9 : 9+length]); err != nil {
+			return fmt.Errorf("erreur écriture fichier segment %d: %v", i, err)
+		}
 
-    file.Close()
-    conn.Close()
+		if dataBuffer[0] != byte(0) || dataBuffer[1023] != byte(1) {
+			return fmt.Errorf("marqueurs segment %d invalides", i)
+		}
+
+		if _, err := conn.Write([]byte("Segment Received")); err != nil {
+			return fmt.Errorf("erreur envoi confirmation segment %d: %v", i, err)
+		}
+	}
+
+	fmt.Printf("Fichier %s reçu avec succès\n", fileName)
+	return nil
 }
