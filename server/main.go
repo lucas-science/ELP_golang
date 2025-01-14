@@ -1,116 +1,124 @@
 package main
 
 import (
-	"fmt"
-	"os"
 	"encoding/binary"
-    "log"
-    "net"
-    "time"
-    "encoding/hex"
-	_ "image"
-	imgFct "workspace/IMAGE"
+	"fmt"
+	"log"
+	"net"
+	"os"
+	"path/filepath"
 )
 
 func main() {
-	fmt.Println("Hello, world.")
-
-	imageData1, _, err1 := imgFct.GetImageData("./data/img1.jpg")
-	imageData2, _, err2 := imgFct.GetImageData("./data/img3.jpg")
-
-	if err1 != nil || err2 != nil {
-		if err1 != nil {
-			fmt.Println("Failed to get image data:", err1)
-		} else if err2 != nil {
-			fmt.Println("Failed to get image data:", err2)
-		} else {
-			fmt.Println("Failed to get these images data")
-		}
-		os.Exit(1)
+	if err := os.MkdirAll("./data", 0755); err != nil {
+		log.Fatal("Erreur création dossier received:", err)
 	}
-	totalDistance := imgFct.GetTotalDistance(imageData1, imageData2)
-
-	fmt.Println("Total distance:", totalDistance)
+	Init_Tcp()
 }
-
-
 
 func Init_Tcp() {
-    ln, err := net.Listen("tcp", ":8080")
-    if err != nil {
-        fmt.Println(err)
-        return
-    }
-    defer ln.Close()
+	ln, err := net.Listen("tcp", ":8080")
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	defer ln.Close()
 
-    for {
-    	fmt.Println("coucou")
-        conn, err := ln.Accept()
-        if err != nil {
-            log.Fatal(err)
-        }
-        println("Hello")
-        go handleIncomingRequests(conn)
-    }
+	for {
+		fmt.Println("En attente de connexion...")
+		conn, err := ln.Accept()
+		if err != nil {
+			log.Printf("Erreur d'acceptation de connexion: %v", err)
+			continue
+		}
+		go handleConnection(conn)
+	}
 }
 
-func handleIncomingRequests(conn net.Conn) {
-    fmt.Println("Received a request: " + conn.RemoteAddr().String())
-    headerBuffer := make([]byte, 1024)
+func handleConnection(conn net.Conn) {
+	defer conn.Close()
 
-    n, err := conn.Read(headerBuffer)
-    if err != nil || n != 1024 {
-        log.Fatal("Erreur de lecture du header ou taille incorrecte")
-    }
+	for {
+		if err := handleIncomingFile(conn); err != nil {
+			if err.Error() == "EOF" {
+				fmt.Println("Client déconnecté")
+				return
+			}
+			log.Printf("Erreur de traitement du fichier: %v", err)
+			return
+		}
+	}
+}
 
-    if headerBuffer[0] != byte(1) || headerBuffer[1023] != byte(0) {
-        log.Fatal("Invalid header markers")
-    }
+func handleIncomingFile(conn net.Conn) error {
+	headerBuffer := make([]byte, 1024)
 
-    var name string
-    var reps uint32
+	n, err := conn.Read(headerBuffer)
+	if err != nil {
+		return err
+	}
+	if n != 1024 {
+		return fmt.Errorf("taille header invalide: %d", n)
+	}
 
-    reps = binary.BigEndian.Uint32(headerBuffer[1:5])
-    lengthOfName := binary.BigEndian.Uint32(headerBuffer[5:9])
-    name = string(headerBuffer[9:9+lengthOfName])
+	if headerBuffer[0] != byte(1) || headerBuffer[1023] != byte(0) {
+		return fmt.Errorf("marqueurs header invalides")
+	}
 
-    conn.Write([]byte("Header Received"))
+	reps := binary.BigEndian.Uint32(headerBuffer[1:5])
+	lengthOfName := binary.BigEndian.Uint32(headerBuffer[5:9])
+	fullPath := string(headerBuffer[9 : 9+lengthOfName])
 
-    dataBuffer := make([]byte, 1024)
+	_, fileName := filepath.Split(fullPath)
+	if fileName == "" {
+		return fmt.Errorf("nom de fichier invalide")
+	}
 
-    file, err := os.Create("./received/" + name)
-    if err != nil {
-        log.Fatal(err)
-    }
+	fmt.Printf("Réception du fichier: %s\n", fileName)
 
-    for i := 0; i < int(reps); i++ {
-        _, err := conn.Read(dataBuffer)
-        if err != nil {
-            log.Fatal(err)
-        }
+	if _, err := conn.Write([]byte("Header Received")); err != nil {
+		return fmt.Errorf("erreur envoi confirmation header: %v", err)
+	}
 
-        if len(dataBuffer) < 1024 {
-            log.Fatal("Invalid Segment: Buffer size mismatch")
-        }
+	filePath := filepath.Join("./received", fileName)
+	file, err := os.Create(filePath)
+	if err != nil {
+		return fmt.Errorf("erreur création fichier: %v", err)
+	}
+	defer file.Close()
 
-        segmentNumber := binary.BigEndian.Uint32(dataBuffer[1:5])
-        fmt.Printf("Segment Number: %d\n", segmentNumber)
+	dataBuffer := make([]byte, 1024)
+	for i := 0; i < int(reps); i++ {
+		n, err := conn.Read(dataBuffer)
+		if err != nil {
+			return fmt.Errorf("erreur lecture segment %d: %v", i, err)
+		}
+		if n != 1024 {
+			return fmt.Errorf("taille segment %d invalide: %d", i, n)
+		}
 
-        length := binary.BigEndian.Uint32(dataBuffer[5:9])
-        fmt.Printf("File Data: %s\n", hex.EncodeToString(dataBuffer[9:9+length]))
+		segmentNumber := binary.BigEndian.Uint32(dataBuffer[1:5])
+		length := binary.BigEndian.Uint32(dataBuffer[5:9])
 
-        file.Write(dataBuffer[9 : 9+length])
+		fmt.Printf("Fichier: %s, Segment: %d/%d\n", fileName, segmentNumber+1, reps)
 
-        if dataBuffer[0] != byte(0) || dataBuffer[1023] != byte(1) {
-            log.Fatal("Invalid Segment")
-        }
+		if length > 1014 {
+			return fmt.Errorf("longueur données invalide segment %d: %d", i, length)
+		}
 
-        conn.Write([]byte("Segment Received"))
-    }
+		if _, err := file.Write(dataBuffer[9 : 9+length]); err != nil {
+			return fmt.Errorf("erreur écriture fichier segment %d: %v", i, err)
+		}
 
-    time := time.Now().UTC().Format("Monday, 02-Jan-06 15:04:05 MST")
-    conn.Write([]byte(time))
+		if dataBuffer[0] != byte(0) || dataBuffer[1023] != byte(1) {
+			return fmt.Errorf("marqueurs segment %d invalides", i)
+		}
 
-    file.Close()
-    conn.Close()
+		if _, err := conn.Write([]byte("Segment Received")); err != nil {
+			return fmt.Errorf("erreur envoi confirmation segment %d: %v", i, err)
+		}
+	}
+
+	fmt.Printf("Fichier %s reçu avec succès\n", fileName)
+	return nil
 }
