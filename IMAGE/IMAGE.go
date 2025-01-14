@@ -1,4 +1,4 @@
-package main
+package IMAGE
 
 import (
 	"fmt"
@@ -13,7 +13,7 @@ type RGB struct {
 	R, G, B int
 }
 
-func getImageData(path string) (image.Image, string, error) {
+func GetImageData(path string) (image.Image, string, error) {
 	fmt.Println("Récupération des données de ", path)
 	imgFile, err := os.Open(path)
 	if err != nil {
@@ -91,25 +91,4 @@ func GetTotalDistance(imageData1 image.Image, imageData2 image.Image) float64 {
 	wg.Wait()
 
 	return totalDistance
-}
-
-func main() {
-	fmt.Println("Hello, world.")
-
-	imageData1, _, err1 := getImageData("./img/img1.jpg")
-	imageData2, _, err2 := getImageData("./img/img3.jpg")
-
-	if err1 != nil || err2 != nil {
-		if err1 != nil {
-			fmt.Println("Failed to get image data:", err1)
-		} else if err2 != nil {
-			fmt.Println("Failed to get image data:", err2)
-		} else {
-			fmt.Println("Failed to get these images data")
-		}
-		os.Exit(1)
-	}
-	totalDistance := GetTotalDistance(imageData1, imageData2)
-
-	fmt.Println("Total distance:", totalDistance)
 }
