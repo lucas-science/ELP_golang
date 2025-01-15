@@ -9,8 +9,6 @@ import (
 	"sync"
 )
 
-var wg sync.WaitGroup
-
 type RGB struct {
 	R, G, B int
 }
@@ -56,8 +54,7 @@ func createRGBRow(imageData image.Image, y int) []RGB {
 	return row
 }
 
-func GetTotalDistance(imageData1 image.Image, imageData2 image.Image, wg2 sync.WaitGroup) float64 {
-	defer wg2.Done()
+func GetTotalDistance(imageData1 image.Image, imageData2 image.Image) float64 {
 	bounds1 := imageData1.Bounds()
 	bounds2 := imageData2.Bounds()
 

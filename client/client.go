@@ -35,7 +35,6 @@ func sendPhoto(folderPath string) any {
 	}
 	defer conn.Close()
 
-	fmt.Println(folderPath)
 	f, err := os.Open(folderPath)
 	if err != nil {
 		fmt.Println(err)
@@ -47,7 +46,17 @@ func sendPhoto(folderPath string) any {
 		return nil
 	}
 
+	fmt.Println("Nombre de fichiers:", len(files))
+	for _, v := range files {
+		fmt.Println(v.IsDir(), v.Name())
+	}
+	if err := tcpFct.SendPath(conn, folderPath); err != nil {
+		log.Fatal("Erreur lors de l'envoi du chemin:", err)
+	}
 	for i, v := range files {
+		if v.IsDir() {
+			continue
+		}
 		fmt.Println(i, v.Name())
 
 		file, err := os.Open(folderPath + "/" + v.Name())
@@ -68,6 +77,7 @@ func sendPhoto(folderPath string) any {
 			log.Fatal(err)
 		}
 	}
+	tcpFct.SendEndMessage(conn)
 	return nil
 }
 
@@ -87,7 +97,5 @@ func main() {
 			showFolderOpen(myWindow)
 		}),
 	))
-
-	// Lancer l'application
 	myWindow.ShowAndRun()
 }
