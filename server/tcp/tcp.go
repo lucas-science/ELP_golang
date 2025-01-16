@@ -48,7 +48,7 @@ func sendEndMessage(conn net.Conn) error {
 	if _, err := conn.Write(buffer); err != nil {
 		return fmt.Errorf("erreur envoi END: %v", err)
 	}
-	return waitForAck(conn)
+	return nil
 }
 
 func sendHeader(conn net.Conn, header FileMetaData) error {
