@@ -18,7 +18,7 @@ import (
 
 var fileCounter int = 1
 
-//var clientPath string = ""
+var clientPath string = ""
 
 const (
 	PATH_CODE  byte = 1 // Code pour l'envoi du
@@ -35,12 +35,14 @@ func showFolderOpen(parent fyne.Window) {
 			return
 		}
 		if folder != nil {
+			clientPath = folder.Path()
+
 			conn, err := tcpFct.CreateConnection()
 			if err != nil {
 				log.Fatal(err)
 			}
 
-			if err := os.MkdirAll("./filtred", 0755); err != nil {
+			if err := os.MkdirAll(clientPath+"/filtred", 0755); err != nil {
 				log.Fatal("Erreur création dossier filtred:", err)
 			}
 
@@ -81,12 +83,12 @@ func handleConnection(conn net.Conn) {
 	defer conn.Close()
 
 	// Créer le dossier filtred s'il n'existe pas
-	if err := os.MkdirAll("./filtred", 0755); err != nil {
+	if err := os.MkdirAll(clientPath+"/filtred", 0755); err != nil {
 		log.Printf("Erreur création dossier filtred: %v", err)
 		return
 	}
 
-	fileCounter = 1 // Réinitialiser le compteur pour les fichiers reçus
+	fileCounter = 1
 
 	for {
 		codeBuffer := make([]byte, 1)
@@ -138,7 +140,7 @@ func handleIncomingFile(conn net.Conn) error {
 
 	fmt.Printf("Réception du fichier: %s -> %s\n", fileName, newName)
 
-	filePath := filepath.Join("./filtred", newName)
+	filePath := filepath.Join(clientPath+"/filtred", newName)
 	file, err := os.Create(filePath)
 	if err != nil {
 		return fmt.Errorf("erreur création fichier: %v", err)
@@ -154,6 +156,8 @@ func handleIncomingFile(conn net.Conn) error {
 		if n != 1024 {
 			return fmt.Errorf("taille segment %d invalide: %d", i, n)
 		}
+
+		// debug info
 		//segmentNumber := binary.BigEndian.Uint32(dataBuffer[1:5])
 		//fmt.Printf("Fichier: %s, Segment: %d/%d\n", newName, segmentNumber+1, reps)
 

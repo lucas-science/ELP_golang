@@ -57,7 +57,7 @@ func sendEndMessage(conn net.Conn) error {
 	if _, err := conn.Write(buffer); err != nil {
 		return fmt.Errorf("erreur envoi END: %v", err)
 	}
-	return waitForAck(conn)
+	return nil
 }
 
 func sendHeader(conn net.Conn, header FileMetaData) error {
@@ -77,30 +77,6 @@ func sendHeader(conn net.Conn, header FileMetaData) error {
 
 	_, err := conn.Write(headerBuffer)
 	return err
-}
-func waitForAck(conn net.Conn) error {
-	response := make([]byte, 2)
-	_, err := conn.Read(response)
-	if err != nil {
-		return fmt.Errorf("erreur lecture réponse: %v", err)
-	}
-
-	if response[0] == ERROR_CODE {
-		// Lire le message d'erreur
-		msgLen := response[1]
-		errMsg := make([]byte, msgLen)
-		_, err := conn.Read(errMsg)
-		if err != nil {
-			return fmt.Errorf("erreur lecture message erreur: %v", err)
-		}
-		return fmt.Errorf("erreur serveur: %s", string(errMsg))
-	}
-
-	if response[0] != ACK_CODE || response[1] != 1 {
-		return fmt.Errorf("réponse invalide du serveur")
-	}
-
-	return nil
 }
 
 func sendFileSegments(conn net.Conn, file *os.File, header FileMetaData) error {
@@ -172,7 +148,6 @@ func SendPhoto(folderPath string, conn net.Conn) error {
 		}
 		file.Close()
 	}
-	buffer := []byte{END_CODE}
-	_, err = conn.Write(buffer)
-	return err
+
+	return sendEndMessage(conn)
 }

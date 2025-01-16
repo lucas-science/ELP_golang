@@ -100,15 +100,6 @@ func Init_Tcp(wg1 *sync.WaitGroup) {
 	}
 }
 
-func sendError(conn net.Conn, errMsg string) error {
-	response := make([]byte, len(errMsg)+2)
-	response[0] = ERROR_CODE
-	response[1] = byte(len(errMsg))
-	copy(response[2:], []byte(errMsg))
-	_, err := conn.Write(response)
-	return err
-}
-
 func handleConnection(conn net.Conn) {
 	defer conn.Close()
 
@@ -193,6 +184,7 @@ func handleIncomingFile(conn net.Conn) error {
 
 		length := binary.BigEndian.Uint32(dataBuffer[5:9])
 
+		// debug info
 		//segmentNumber := binary.BigEndian.Uint32(dataBuffer[1:5])
 		//fmt.Printf("Fichier: %s, Segment: %d/%d\n", newName, segmentNumber+1, reps)
 
