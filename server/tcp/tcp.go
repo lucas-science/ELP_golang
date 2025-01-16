@@ -3,9 +3,9 @@ package tcp
 import (
 	"encoding/binary"
 	"fmt"
+	"log"
 	"net"
 	"os"
-	"time"
 )
 
 const (
@@ -43,15 +43,6 @@ func setMetaDataFile(file *os.File) FileMetaData {
 	}
 }
 
-func CreateConnection() (net.Conn, error) {
-	conn, err := net.Dial("tcp", HOST+":"+PORT)
-	if err != nil {
-		return nil, fmt.Errorf("connection error: %v", err)
-	}
-	conn.SetDeadline(time.Now().Add(30 * time.Second))
-	return conn, nil
-}
-
 func sendEndMessage(conn net.Conn) error {
 	buffer := []byte{END_CODE}
 	if _, err := conn.Write(buffer); err != nil {
@@ -67,7 +58,7 @@ func sendHeader(conn net.Conn, header FileMetaData) error {
 		return fmt.Errorf("erreur envoi code fichier: %v", err)
 	}
 
-	// Envoyer le header
+	// Envoyer le header comme avant
 	headerBuffer := make([]byte, 1024)
 	headerBuffer[0] = 1
 	binary.BigEndian.PutUint32(headerBuffer[1:5], header.reps)
@@ -75,9 +66,13 @@ func sendHeader(conn net.Conn, header FileMetaData) error {
 	copy(headerBuffer[9:9+len(header.name)], []byte(header.name))
 	headerBuffer[1023] = 0
 
-	_, err := conn.Write(headerBuffer)
-	return err
+	if _, err := conn.Write(headerBuffer); err != nil {
+		return fmt.Errorf("erreur envoi header: %v", err)
+	}
+
+	return nil
 }
+
 func waitForAck(conn net.Conn) error {
 	response := make([]byte, 2)
 	_, err := conn.Read(response)
@@ -110,7 +105,7 @@ func sendFileSegments(conn net.Conn, file *os.File, header FileMetaData) error {
 	for i := 0; i < int(header.reps); i++ {
 		fmt.Printf("Envoi segment %d/%d...\r", i+1, header.reps)
 		if err := sendSegment(conn, file, dataBuffer, i); err != nil {
-			fmt.Println()
+			fmt.Println() // Pour la nouvelle ligne après le \r
 			return fmt.Errorf("erreur segment %d: %v", i, err)
 		}
 	}
@@ -131,48 +126,56 @@ func sendSegment(conn net.Conn, file *os.File, dataBuffer []byte, segmentNum int
 	binary.BigEndian.PutUint32(segmentBuffer[5:9], uint32(n))
 	copy(segmentBuffer[9:9+n], dataBuffer[:n])
 	segmentBuffer[1023] = 1
+	//fmt.Printf("Envoi segment, taille: %d octets\n", len(segmentBuffer))
 
-	_, err = conn.Write(segmentBuffer)
-	return err
+	if _, err := conn.Write(segmentBuffer); err != nil {
+		return fmt.Errorf("erreur écriture segment: %v", err)
+	}
+	return nil
 }
 
-func SendPhoto(folderPath string, conn net.Conn) error {
+func SendPhoto(folderPath string, conn net.Conn) any {
 	f, err := os.Open(folderPath)
 	if err != nil {
-		return fmt.Errorf("erreur ouverture dossier: %v", err)
+		fmt.Println(err)
+		return nil
 	}
-	defer f.Close()
-
 	files, err := f.Readdir(0)
 	if err != nil {
-		return fmt.Errorf("erreur lecture dossier: %v", err)
+		fmt.Println(err)
+		return nil
 	}
 
 	fmt.Println("Nombre de fichiers:", len(files))
 	for _, v := range files {
+		fmt.Println(v.IsDir(), v.Name())
+	}
+	for i, v := range files {
 		if v.IsDir() {
 			continue
 		}
-		fmt.Println(v.Name())
+		fmt.Println(i, v.Name())
 
 		file, err := os.Open(folderPath + "/" + v.Name())
 		if err != nil {
-			return fmt.Errorf("erreur ouverture fichier: %v", err)
+			log.Fatal(err)
 		}
+		defer file.Close()
 
 		header := setMetaDataFile(file)
+		fmt.Println("Envoi du fichier:", header.name)
 		if err := sendHeader(conn, header); err != nil {
-			file.Close()
-			return fmt.Errorf("erreur envoi header: %v", err)
+			fmt.Println("Erreur lors de l'envoi du header")
+			log.Fatal(err)
 		}
 
+		fmt.Println("Envoi des segments...")
+
 		if err := sendFileSegments(conn, file, header); err != nil {
-			file.Close()
-			return fmt.Errorf("erreur envoi segments: %v", err)
+			fmt.Println("Erreur lors de l'envoi du fichier")
+			log.Fatal(err)
 		}
-		file.Close()
 	}
-	buffer := []byte{END_CODE}
-	_, err = conn.Write(buffer)
-	return err
+	sendEndMessage(conn)
+	return nil
 }

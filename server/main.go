@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"sync"
 	imgFct "workspace/IMAGE"
+	tcpFct "workspace/tcp"
 )
 
 const (
@@ -22,7 +23,6 @@ const (
 )
 
 var fileCounter int = 1
-var clientPath string = ""
 
 func main() {
 	var wg1 sync.WaitGroup
@@ -35,13 +35,13 @@ func main() {
 func filtreImages() {
 	var wg2 sync.WaitGroup
 
-	var compteur int = compte_Images(clientPath + "/received")
+	var compteur int = compte_Images("./received")
 
 	images := make([]image.Image, compteur)
 	var buff string
 	erreurs := make([]error, compteur)
 	for i := 1; i <= compteur; i++ {
-		buff = fmt.Sprintf(clientPath+"/received/%d.jpg", i)
+		buff = fmt.Sprintf("./received/%d.jpg", i)
 		fmt.Println("buff num ", i, " = ", buff)
 		images[i-1], _, erreurs[i-1] = imgFct.GetImageData(buff)
 		if erreurs[i-1] != nil {
@@ -100,14 +100,6 @@ func Init_Tcp(wg1 *sync.WaitGroup) {
 	}
 }
 
-func sendAck(conn net.Conn) error {
-	response := make([]byte, 2)
-	response[0] = ACK_CODE
-	response[1] = 1 // 1 pour succès
-	_, err := conn.Write(response)
-	return err
-}
-
 func sendError(conn net.Conn, errMsg string) error {
 	response := make([]byte, len(errMsg)+2)
 	response[0] = ERROR_CODE
@@ -120,7 +112,11 @@ func sendError(conn net.Conn, errMsg string) error {
 func handleConnection(conn net.Conn) {
 	defer conn.Close()
 
-	pathReceived := false
+	// Créer le dossier received s'il n'existe pas
+	if err := os.MkdirAll("./received", 0755); err != nil {
+		log.Printf("Erreur création dossier received: %v", err)
+		return
+	}
 
 	for {
 		codeBuffer := make([]byte, 1)
@@ -131,62 +127,32 @@ func handleConnection(conn net.Conn) {
 		}
 
 		switch codeBuffer[0] {
-		case PATH_CODE:
-			sizeBuf := make([]byte, 4)
-			_, err := conn.Read(sizeBuf)
-			if err != nil {
-				log.Printf("Erreur lecture taille chemin: %v", err)
-				return
-			}
-			pathSize := binary.BigEndian.Uint32(sizeBuf)
-
-			pathBuf := make([]byte, pathSize)
-			_, err = conn.Read(pathBuf)
-			if err != nil {
-				log.Printf("Erreur lecture chemin: %v", err)
-				return
-			}
-
-			clientPath = string(pathBuf)
-			pathReceived = true
-			fmt.Printf("Chemin reçu: %s\n", clientPath)
-
-			if err := os.MkdirAll(clientPath+"/received", os.ModePerm); err != nil {
-				log.Printf("Erreur création dossier: %v", err)
-				sendError(conn, "Erreur création dossier")
-				return
-			}
-
-			sendAck(conn)
-
 		case FILE_CODE:
-			if !pathReceived {
-				sendError(conn, "Chemin non reçu")
-				return
-			}
-
 			if err := handleIncomingFile(conn); err != nil {
 				log.Printf("Erreur traitement fichier: %v", err)
-				sendError(conn, fmt.Sprintf("Erreur fichier: %v", err))
 				return
 			}
 
 		case END_CODE:
-			sendAck(conn)
 			fmt.Println("Message de fin reçu, lancement du filtrage...")
 			fileCounter = 1
+
+			// Exécuter le filtrage
 			filtreImages()
+
+			// Renvoyer les images filtrées
+			fmt.Println("Envoi des images filtrées au client...")
+			if err := tcpFct.SendPhoto("./received", conn); err != nil {
+				log.Printf("Erreur envoi images filtrées: %v", err)
+			}
 			return
 
 		default:
 			log.Printf("Code message inconnu: %d", codeBuffer[0])
-			sendError(conn, "Code message inconnu")
 			return
 		}
 	}
 }
-func handlePATH()
-
 func handleIncomingFile(conn net.Conn) error {
 	headerBuffer := make([]byte, 1024)
 	_, err := conn.Read(headerBuffer)
@@ -208,11 +174,7 @@ func handleIncomingFile(conn net.Conn) error {
 
 	fmt.Printf("Réception du fichier: %s -> %s\n", fileName, newName)
 
-	if err := sendAck(conn); err != nil {
-		return fmt.Errorf("erreur envoi ack header: %v", err)
-	}
-
-	filePath := filepath.Join(clientPath+"/received", newName)
+	filePath := filepath.Join("./received", newName)
 	file, err := os.Create(filePath)
 	if err != nil {
 		return fmt.Errorf("erreur création fichier: %v", err)
@@ -240,10 +202,6 @@ func handleIncomingFile(conn net.Conn) error {
 
 		if _, err := file.Write(dataBuffer[9 : 9+length]); err != nil {
 			return fmt.Errorf("erreur écriture fichier segment %d: %v", i, err)
-		}
-
-		if err := sendAck(conn); err != nil {
-			return fmt.Errorf("erreur envoi ack segment %d: %v", i, err)
 		}
 	}
 
