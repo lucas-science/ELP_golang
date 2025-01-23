@@ -13,3 +13,7 @@
 
 - fix le bug aleatoire : desfois des segments sont pas de la bonne taille attendue donc ça plante (=> mettre en place une logique de renvois si erreur sur un segment)
 - fix l'algo pour que la similarité soit plus flagrante (on a une distance de pixel encore trop proche entre les cas : deux photo différentes et deux photo similaire)
+
+Commandes unix à installer :
+  sudo apt install build-essential libx11-dev libgl1-mesa-dev xorg-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev
+  
