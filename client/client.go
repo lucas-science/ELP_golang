@@ -5,6 +5,7 @@ import (
 	tcpFct "client/tcp"
 	"log"
 	"os"
+	"sync"
 )
 
 var fileCounter int = 1
@@ -20,7 +21,7 @@ const (
 )
 
 func main() {
-	folder := "/home/lucaslhm/Téléchargements"
+	folder := "/home/lucaslhm/Documents/test_golang"
 	clientPath = folder
 
 	conn, err := tcpFct.CreateConnection()
@@ -32,11 +33,14 @@ func main() {
 		log.Fatal("Erreur création dossier filtred:", err)
 	}
 
-	go tcpHandle.HandleConnection(conn, &fileCounter, clientPath)
-
 	if err := tcpFct.SendPhoto(folder, conn); err != nil {
 		log.Printf("Erreur envoi photos: %v", err)
 		conn.Close()
 		return
 	}
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go tcpHandle.HandleConnection(conn, &fileCounter, clientPath, &wg)
+	wg.Wait()
 }

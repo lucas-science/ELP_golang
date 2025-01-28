@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"sync"
 )
 
 const (
@@ -17,8 +18,9 @@ const (
 	ERROR_CODE byte = 5
 )
 
-func HandleConnection(conn net.Conn, fileCounter *int, clientPath string) {
+func HandleConnection(conn net.Conn, fileCounter *int, clientPath string, wg *sync.WaitGroup) {
 	defer conn.Close()
+	defer wg.Done()
 
 	// Créer le dossier filtred s'il n'existe pas
 	if err := os.MkdirAll(clientPath+"/filtred", 0755); err != nil {
@@ -71,7 +73,7 @@ func handleIncomingFile(conn net.Conn, fileCounter *int, clientPath string) erro
 		return fmt.Errorf("nom de fichier invalide")
 	}
 
-	newName := fmt.Sprintf("%d.jpg", fileCounter)
+	newName := fmt.Sprintf("%d.jpg", *fileCounter)
 	*fileCounter++
 
 	fmt.Printf("Réception du fichier: %s -> %s\n", fileName, newName)
