@@ -17,7 +17,7 @@ const (
 	ERROR_CODE byte = 5
 )
 
-func HandleConnection(conn net.Conn, fileCounter int, clientPath string) {
+func HandleConnection(conn net.Conn, fileCounter *int, clientPath string) {
 	defer conn.Close()
 
 	// Créer le dossier filtred s'il n'existe pas
@@ -55,7 +55,7 @@ func HandleConnection(conn net.Conn, fileCounter int, clientPath string) {
 		}
 	}
 }
-func handleIncomingFile(conn net.Conn, fileCounter int, clientPath string) error {
+func handleIncomingFile(conn net.Conn, fileCounter *int, clientPath string) error {
 	headerBuffer := make([]byte, 1024)
 	_, err := conn.Read(headerBuffer)
 	if err != nil {
@@ -72,7 +72,7 @@ func handleIncomingFile(conn net.Conn, fileCounter int, clientPath string) error
 	}
 
 	newName := fmt.Sprintf("%d.jpg", fileCounter)
-	fileCounter++
+	*fileCounter++
 
 	fmt.Printf("Réception du fichier: %s -> %s\n", fileName, newName)
 

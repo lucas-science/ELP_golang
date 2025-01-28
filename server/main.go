@@ -42,6 +42,6 @@ func Init_Tcp(wg1 *sync.WaitGroup) {
 			log.Printf("Erreur d'acceptation de connexion: %v", err)
 			continue
 		}
-		go tcpHandle.HandleConnection(conn, fileCounter)
+		go tcpHandle.HandleConnection(conn, &fileCounter)
 	}
 }
