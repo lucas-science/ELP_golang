@@ -19,9 +19,9 @@ const (
 	ERROR_CODE byte = 5
 )
 
-func HandleConnection(conn net.Conn, fileCounter int) {
+func HandleConnection(conn net.Conn, fileCounter *int) {
 	defer conn.Close()
-
+	fmt.Println(fileCounter)
 	// Créer le dossier received s'il n'existe pas
 	if err := os.MkdirAll("./received", 0755); err != nil {
 		log.Printf("Erreur création dossier received: %v", err)
@@ -45,7 +45,7 @@ func HandleConnection(conn net.Conn, fileCounter int) {
 
 		case END_CODE:
 			fmt.Println("Message de fin reçu, lancement du filtrage...")
-			fileCounter = 1
+			*fileCounter = 1
 
 			// Exécuter le filtrage
 			filtre.FiltreImages()
@@ -63,7 +63,7 @@ func HandleConnection(conn net.Conn, fileCounter int) {
 		}
 	}
 }
-func handleIncomingFile(conn net.Conn, fileCounter int) error {
+func handleIncomingFile(conn net.Conn, fileCounter *int) error {
 	headerBuffer := make([]byte, 1024)
 	_, err := conn.Read(headerBuffer)
 	if err != nil {
@@ -79,8 +79,8 @@ func handleIncomingFile(conn net.Conn, fileCounter int) error {
 		return fmt.Errorf("nom de fichier invalide")
 	}
 
-	newName := fmt.Sprintf("%d.jpg", fileCounter)
-	fileCounter++
+	newName := fmt.Sprintf("%d.jpg", *fileCounter)
+	*fileCounter++
 
 	fmt.Printf("Réception du fichier: %s -> %s\n", fileName, newName)
 
