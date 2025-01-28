@@ -93,12 +93,8 @@ func handleIncomingFile(conn net.Conn, fileCounter *int) error {
 
 	dataBuffer := make([]byte, 1024)
 	for i := 0; i < int(reps); i++ {
-		n, err := conn.Read(dataBuffer)
-		if err != nil {
+		if err := readFull(conn, dataBuffer, 1024); err != nil {
 			return fmt.Errorf("erreur lecture segment %d: %v", i, err)
-		}
-		if n != 1024 {
-			return fmt.Errorf("taille segment %d invalide: %d", i, n)
 		}
 
 		length := binary.BigEndian.Uint32(dataBuffer[5:9])
@@ -117,5 +113,17 @@ func handleIncomingFile(conn net.Conn, fileCounter *int) error {
 	}
 
 	fmt.Printf("Fichier %s reçu avec succès\n", newName)
+	return nil
+}
+
+func readFull(conn net.Conn, buffer []byte, size int) error {
+	totalRead := 0
+	for totalRead < size {
+		n, err := conn.Read(buffer[totalRead:])
+		if err != nil {
+			return fmt.Errorf("erreur lecture segment (lu %d/%d octets): %v", totalRead, size, err)
+		}
+		totalRead += n
+	}
 	return nil
 }
