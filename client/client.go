@@ -21,7 +21,7 @@ const (
 )
 
 func main() {
-	folder := "/home/lucaslhm/Documents/test_golang"
+	folder := "/home/louis/Documents/louis/INSA/ELP/GO/ELP_golang/client/Images"
 	clientPath = folder
 
 	conn, err := tcpFct.CreateConnection()

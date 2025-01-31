@@ -22,9 +22,15 @@ const (
 func HandleConnection(conn net.Conn, fileCounter *int) {
 	defer conn.Close()
 	fmt.Println(fileCounter)
+	
+	// supprime le dossier received
+	if err := os.RemoveAll("./received"); err != nil {
+		log.Printf("Failed to clean folder : %v", err)
+		return
+	}
 	// Créer le dossier received s'il n'existe pas
 	if err := os.MkdirAll("./received", 0755); err != nil {
-		log.Printf("Erreur création dossier received: %v", err)
+		log.Printf("Failed to create folder : %v", err)
 		return
 	}
 
@@ -69,6 +75,8 @@ func handleIncomingFile(conn net.Conn, fileCounter *int) error {
 	if err != nil {
 		return fmt.Errorf("erreur lecture header: %v", err)
 	}
+	
+	
 
 	reps := binary.BigEndian.Uint32(headerBuffer[1:5])
 	lengthOfName := binary.BigEndian.Uint32(headerBuffer[5:9])

@@ -4,14 +4,18 @@ import (
 	"fmt"
 	"image"
 	_ "image/jpeg"
-	"math"
 	"os"
 	"sync"
+	"gocv.io/x/gocv"
+	"image/color"
+	"math"
 )
 
+/*
 type RGB struct {
 	R, G, B int
 }
+*/
 
 func GetImageData(path string) (image.Image, string, error) {
 	fmt.Println("Récupération des données de ", path)
@@ -29,6 +33,8 @@ func GetImageData(path string) (image.Image, string, error) {
 	}
 	return imageData, imageType, nil
 }
+
+/*
 
 func distanceEuclidienneRGB(pixel1 RGB, pixel2 RGB) float64 {
 	r1, g1, b1 := pixel1.R, pixel1.G, pixel1.B
@@ -53,6 +59,7 @@ func createRGBRow(imageData image.Image, y int) []RGB {
 	}
 	return row
 }
+
 
 func GetTotalDistance(imageData1 image.Image, imageData2 image.Image) float64 {
 	bounds1 := imageData1.Bounds()
@@ -89,4 +96,85 @@ func GetTotalDistance(imageData1 image.Image, imageData2 image.Image) float64 {
 	wg.Wait()
 
 	return totalDistance
+}
+
+*/
+
+func euclidienne (desc1, desc2 gocv.Mat) float64 {
+	if desc1.Cols() != desc2.Cols() || desc1.Rows() != desc2.Rows() {
+		fmt.Println("Different descriptors length detected !")
+		return math.Inf(1) // Distance infinie si incompatibles
+	}
+	
+	var distance float64
+	for i := 0; i < desc1.Rows(); i++ {
+		for j := 0; j < desc1.Cols(); j++ {
+			var diff float64
+			diff = float64(desc1.GetFloatAt(i, j) - desc2.GetFloatAt(i, j))
+			distance += diff * diff
+		}
+	}
+
+	return math.Sqrt(distance)
+}
+
+func imgtogray (img image.Image) gocv.Mat {
+	
+	bounds := img.Bounds()
+	mat := gocv.NewMatWithSize(bounds.Dy(), bounds.Dx(), gocv.MatTypeCV8U)
+	
+	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+		for x := bounds.Min.X; x < bounds.Max.X; x++ {
+			grayColor := color.GrayModel.Convert(img.At(x, y)).(color.Gray)
+			mat.SetUCharAt(y, x, grayColor.Y)
+		}
+	}
+	return mat
+}
+
+func calcul (img gocv.Mat, sift gocv.SIFT, kpChan chan<- []gocv.KeyPoint, descChan chan<- gocv.Mat, wg7 *sync.WaitGroup) {
+	
+	defer wg7.Done()
+	kp, desc := sift.DetectAndCompute(img, gocv.NewMat())
+	kpChan <- kp
+	descChan <- desc
+}
+
+func GetTotalDistance(imageData1 image.Image, imageData2 image.Image) float64 {
+	
+	img1 := imgtogray(imageData1)
+	img2 := imgtogray(imageData2)
+	defer img1.Close()
+	defer img2.Close()
+	
+	sift := gocv.NewSIFT()
+	defer sift.Close()
+	
+	kpChan1, descChan1 := make(chan []gocv.KeyPoint, 1), make(chan gocv.Mat, 1)
+	kpChan2, descChan2 := make(chan []gocv.KeyPoint, 1), make(chan gocv.Mat, 1)
+	
+	var wg7 sync.WaitGroup
+	wg7.Add(2)
+	go func () {
+		calcul(img1, sift, kpChan1, descChan1, &wg7)
+		close(kpChan1)
+		close(descChan1)
+	}()
+	go func () {
+		calcul(img2, sift, kpChan2, descChan2, &wg7)
+		close(kpChan2)
+		close(descChan2)
+	}()
+	wg7.Wait()
+	desc1 := <-descChan1
+	desc2 := <-descChan2
+	defer desc1.Close()
+	defer desc2.Close()
+	
+	if desc1.Empty() || desc2.Empty() {
+		fmt.Println("Error : Can't read descriptors'")
+		os.Exit(1)
+	}
+	distancefinale := euclidienne(desc1.RowRange(0, 1), desc2.RowRange(0, 1))
+	return distancefinale
 }

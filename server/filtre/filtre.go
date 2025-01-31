@@ -11,9 +11,9 @@ import (
 
 func FiltreImages() {
 	var wg2 sync.WaitGroup
-
+	
 	var compteur int = compte_Images("./received")
-
+	
 	images := make([]image.Image, compteur)
 	var buff string
 	erreurs := make([]error, compteur)
@@ -29,6 +29,7 @@ func FiltreImages() {
 	for i := 1; i < compteur; i++ {
 		for j := (i + 1); j <= compteur; j++ {
 			wg2.Add(1)
+			fmt.Printf("lancement des goroutines\n")
 			go compare(images[i-1], images[j-1], i, j, &wg2)
 		}
 	}
